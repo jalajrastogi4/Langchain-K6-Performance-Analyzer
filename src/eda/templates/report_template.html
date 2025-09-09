@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>K6 Load Test Report</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        body { margin: 20px; }
+        .plot { margin: 30px 0; text-align: center; }
+    </style>
+</head>
+<body>
+    <h1 class="mb-4">📊 K6 Load Test Report</h1>
+
+    <h2>Global Metrics</h2>
+    <ul>
+        {% for key, value in global_metrics.items() %}
+            <li><strong>{{ key }}:</strong> {{ value }}</li>
+        {% endfor %}
+    </ul>
+
+    <h2>Endpoint Metrics</h2>
+    <div>{{ endpoint_table|safe }}</div>
+
+    <h2>Plots</h2>
+    <div class="plot">
+        <h4>Status Code Distribution</h4>
+        <img src="{{ plots.status_dist }}" alt="Status Distribution" class="img-fluid">
+    </div>
+    <div class="plot">
+        <h4>Endpoint Latencies</h4>
+        <img src="{{ plots.latencies }}" alt="Endpoint Latencies" class="img-fluid">
+    </div>
+    <div class="plot">
+        <h4>Endpoint RPS</h4>
+        <img src="{{ plots.rps }}" alt="Endpoint RPS" class="img-fluid">
+    </div>
+</body>
+</html>
