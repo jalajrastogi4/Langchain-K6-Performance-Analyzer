@@ -54,10 +54,8 @@ class AnalysisService:
             raise HTTPException(status_code=404, detail="Report not found")
 
         try:
-            with report_path.open("r", encoding="utf-8") as f:
-                report_content = f.read()
 
-            answer = self.analyzer.answer_question(request.question, report_content)
+            answer = self.analyzer.answer_question(request.question, request.report_id)
 
             return QuestionAnswerResponse(
                 question=request.question,

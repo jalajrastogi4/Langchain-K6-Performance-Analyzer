@@ -5,8 +5,8 @@ from langchain.schema import Document
 
 import pandas as pd
 from typing import Dict, Any, List
-from .retriever import ReportRetriever
-from .prompts import get_qa_prompt, get_summary_prompt
+from src.langchain_app.retriever import ReportRetriever
+from src.langchain_app.prompts import get_qa_prompt, get_summary_prompt
 
 from src.app.core.config import settings
 from src.app.core.logging import get_logger
@@ -56,15 +56,16 @@ class PerformanceChainManager:
                 raise RuntimeError(f"Retriever initialization failed: {e}")
         return self._retriever
     
-    def get_qa_chain(self):
+    def get_qa_chain(self, retriever=None):
         """
         Create Q&A chain.
         """
         try:
-            
+            if retriever is None:
+                retriever = self.retriever
             qa_chain = (
                 RunnableParallel({
-                    "context": self.retriever | self._format_docs,
+                    "context": retriever | self._format_docs,
                     "question": RunnablePassthrough()
                 })
                 | get_qa_prompt()
@@ -79,14 +80,16 @@ class PerformanceChainManager:
             logger.error(f"Failed to create Q&A chain: {e}")
             raise RuntimeError(f"Q&A chain creation failed: {e}")
     
-    def get_summary_chain(self):
+    def get_summary_chain(self, retriever=None):
         """
         Create summary chain.
         """
         try:
-            
+            if retriever is None:
+                retriever = self.retriever
             summary_chain = (
-                get_summary_prompt()
+                {"context": retriever | self._format_docs}
+                | get_summary_prompt()
                 | self.llm  
                 | StrOutputParser()
             )
@@ -98,20 +101,20 @@ class PerformanceChainManager:
             logger.error(f"Failed to create summary chain: {e}")
             raise RuntimeError(f"Summary chain creation failed: {e}")
     
-    def analyze_performance_report(self, report_content: str = None) -> Dict[str, Any]:
+    def analyze_performance_report(self, report_name: str = None) -> Dict[str, Any]:
         """
         Comprehensive analysis of performance report.
         """
         try:
             
-            if report_content:
-                self.retriever_manager.update_vectorstore(report_content)
+            if report_name:
+                self.retriever_manager.update_vectorstore(report_name)
             
             
             summary_chain = self.get_summary_chain()
-            latest_content = report_content or self.retriever_manager.load_latest_report()
+            latest_content = report_name or self.retriever_manager.load_latest_report()
             
-            summary = summary_chain.invoke({"context": latest_content})
+            summary = summary_chain.invoke({"context": "Summarize this report"})
             
             # Generate specific insights using Q&A
             qa_chain = self.get_qa_chain()
@@ -152,9 +155,11 @@ class PerformanceChainManager:
         """
         if not docs:
             return "No relevant context found."
-        
-        formatted = "\n\n".join([doc.page_content for doc in docs])
-        return formatted
+
+        return "\n\n".join(
+            f"Source: {doc.metadata.get('source', 'unknown')}\n{doc.page_content}"
+            for doc in docs
+        )
     
 
 
