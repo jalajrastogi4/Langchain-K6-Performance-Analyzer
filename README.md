@@ -3,7 +3,7 @@
 A FastAPI-based system for **log ingestion, performance report generation, and AI-powered analysis** using LangChain & OpenAI.  
 
 The platform enables teams to:  
-- Upload test logs (CSV/JSON)  
+- Upload test logs with file size in GBs (CSV/JSON)  
 - Normalize & ingest into PostgreSQL  
 - Generate rich HTML performance reports with plots  
 - Summarize & analyze results using LLMs (LangChain + OpenAI)  
@@ -14,8 +14,8 @@ The platform enables teams to:
 ## ✨ Features  
 
 ✅ **File Upload & Ingestion**  
-- Upload CSV/JSON logs  
-- Normalize & store request-level logs in PostgreSQL  
+- Upload CSV/JSON logs
+- Normalize & store request-level logs in PostgreSQL in chunks
 - Full rollback on ingestion errors  
 
 ✅ **Report Generation**  
@@ -55,7 +55,7 @@ The platform enables teams to:
 2. POST /upload :
     - upload raw output of k6 test using this endpoint to create ingestion job
 3. POST /ingestion/{job_id} :
-    - Normalize raw data and Begin data ingesstion in postgres
+    - Normalize raw data and Begin data ingestion in PostgreSQL
 4. POST /report/{file_id} :
     - Generate html report containing metrics and plots to be fed into langchain (check data/reports for sample)
 5. POST /analysis :
