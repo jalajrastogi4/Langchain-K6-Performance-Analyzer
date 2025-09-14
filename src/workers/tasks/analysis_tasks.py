@@ -14,7 +14,7 @@ from src.app.core.logging import get_logger
 logger = get_logger()
 
 
-@celery_app.task(bind=True, name="process_report_analysis")
+@celery_app.task(bind=True, name="process_report_analysis", queue="analysis")
 def process_report_analysis(self, job_id: int, analysis_request: dict):
     """
     Celery task wrapper for report analysis.
@@ -33,7 +33,7 @@ async def _process_report_analysis_async(job_id: int, analysis_request: dict):
     """
     async with db_manager.async_session_factory() as session:
         job_service = JobService(session)
-        analysis_service = AnalysisService(session)
+        analysis_service = AnalysisService()
         analysis_request = AnalyzeRequest(**analysis_request)
 
         try:
@@ -76,7 +76,7 @@ async def _process_report_analysis_async(job_id: int, analysis_request: dict):
             raise
 
 
-@celery_app.task(bind=True, name="process_qa_question")
+@celery_app.task(bind=True, name="process_qa_question", queue="analysis")
 def process_qa_question(self, job_id: int, question_request: dict):
     """
     Celery task wrapper for Q&A processing.
@@ -96,7 +96,7 @@ async def _process_qa_question_async(job_id: int, question_request: dict):
 
     async with db_manager.async_session_factory() as session:
         job_service = JobService(session)
-        analysis_service = AnalysisService(session)
+        analysis_service = AnalysisService()
         question_request = QuestionRequest(**question_request)
         try:
             await job_service.update_job_status(

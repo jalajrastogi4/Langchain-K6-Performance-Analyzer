@@ -6,8 +6,8 @@ celery_app = Celery(
     broker=settings.CELERY_BROKER_URL,  # "pyamqp://guest@localhost//"
     backend=settings.CELERY_RESULT_BACKEND,  # "redis://localhost:6379/0"
     include=[
-        "workers.tasks.ingestion_tasks",
-        "workers.tasks.analysis_tasks"
+        "src.workers.tasks.ingestion_tasks",
+        "src.workers.tasks.analysis_tasks"
     ]
 )
 
@@ -26,7 +26,7 @@ celery_app.conf.update(
     task_max_retries=3,
     task_default_retry_delay=300,
     task_routes={
-        'workers.tasks.ingestion_tasks.*': {'queue': 'ingestion'},
-        'workers.tasks.analysis_tasks.*': {'queue': 'analysis'},
+        'src.workers.tasks.ingestion_tasks.*': {'queue': 'ingestion'},
+        'src.workers.tasks.analysis_tasks.*': {'queue': 'analysis'},
     }
 )

@@ -13,7 +13,7 @@ from src.app.core.logging import get_logger
 logger = get_logger()
 
 
-@celery_app.task(bind=True, name="process_file_ingestion")
+@celery_app.task(bind=True, name="process_file_ingestion", queue="ingestion")
 def process_file_ingestion(self, job_id: int, ingestion_job_id: int, file_id: str):
     """
     Celery task wrapper for file ingestion process.
@@ -37,7 +37,7 @@ async def _process_file_ingestion_async(job_id: int, ingestion_job_id: int, file
             await job_service.update_job_status(
                 job_id=job_id,
                 status=JobStatus.in_progress,
-                started_at=datetime.now(timezone.utc),
+                started_at=datetime.utcnow(),
             )
 
             logger.info(f"Starting ingestion for job {job_id}, file {file_id}")
@@ -47,7 +47,7 @@ async def _process_file_ingestion_async(job_id: int, ingestion_job_id: int, file
             await job_service.update_job_status(
                 job_id=job_id,
                 status=JobStatus.completed,
-                finished_at=datetime.now(timezone.utc),
+                finished_at=datetime.utcnow(),
                 result_data={
                     "message": "Ingestion completed successfully",
                     "file_id": file_id,
@@ -64,7 +64,7 @@ async def _process_file_ingestion_async(job_id: int, ingestion_job_id: int, file
             await job_service.update_job_status(
                 job_id=job_id,
                 status=JobStatus.failed,
-                finished_at=datetime.now(timezone.utc),
+                finished_at=datetime.utcnow(),
                 error_details=str(e)
             )
 

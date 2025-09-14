@@ -59,7 +59,7 @@ class IngestionService:
                 rows_ingested=0,
                 total_rows=0,
                 processing_errors_count=0,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.utcnow(),
                 started_at=None,
                 finished_at=None,
                 error_details=None,
@@ -130,7 +130,7 @@ class IngestionService:
         Ingest data using staging table approach.
         """
         try:
-            async with self.session.begin():
+            # async with self.session.begin():
                 job = await self.get_job_by_id(job_id)
                 if not job:
                     logger.error(f"Job not found with id {job_id}")
@@ -287,7 +287,7 @@ class IngestionService:
                 .values(
                     status="failed", 
                     error_details=error_message, 
-                    finished_at=datetime.now(timezone.utc)
+                    finished_at=datetime.utcnow()
                 ),
             )
             await self.session.commit()
@@ -386,7 +386,7 @@ class IngestionService:
                 .where(IngestionJob.id == job.id)
                 .values(status="failed", 
                         error_details=str(e), 
-                        finished_at=datetime.now(timezone.utc)),
+                        finished_at=datetime.utcnow()),
             )
             await self.session.commit()
             raise HTTPException(status_code=500, detail=str(e))
