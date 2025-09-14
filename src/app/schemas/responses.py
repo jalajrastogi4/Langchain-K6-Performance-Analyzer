@@ -15,6 +15,7 @@ class UploadResponse(BaseResponse):
     file_path: str = Field(description="The path where the file was stored")
     validation: ValidationResult = Field(description="The file validation status")
     file_size_mb: float = Field(description="The size of the file in megabytes")
+    job_id: int = Field(description="The unique identifier for the job")
 
 
 class ReportResponse(BaseResponse):

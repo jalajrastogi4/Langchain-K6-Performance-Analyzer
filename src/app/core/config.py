@@ -67,7 +67,8 @@ class Settings(BaseSettings):
     RABBITMQ_PASSWORD: str = "guest"
     
     CELERY_BROKER_URL: str = f"amqp://{RABBITMQ_USER}:{RABBITMQ_PASSWORD}@{RABBITMQ_HOST}:{RABBITMQ_PORT}//"
-    CELERY_RESULT_BACKEND: str = f"amqp://{RABBITMQ_USER}:{RABBITMQ_PASSWORD}@{RABBITMQ_HOST}:{RABBITMQ_PORT}//"
+    # CELERY_RESULT_BACKEND: str = f"amqp://{RABBITMQ_USER}:{RABBITMQ_PASSWORD}@{RABBITMQ_HOST}:{RABBITMQ_PORT}//"
+    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"
     
     model_config = SettingsConfigDict(
         env_file=".envs/.env.local",  

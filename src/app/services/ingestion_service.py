@@ -7,10 +7,11 @@ from fastapi import UploadFile, HTTPException
 from pathlib import Path
 from typing import Tuple, Optional
 from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update, text
 
 from src.app.models.request_logs import RequestLog
 from src.app.models.ingestion_job import IngestionJob
+from src.app.models.request_logs_staging import RequestLogStaging
 from src.app.schemas.requests import FileUploadMetadata
 from src.app.schemas.responses import UploadResponse
 from src.app.schemas.common import ValidationResult
@@ -38,7 +39,7 @@ class IngestionService:
 
     async def save_upload_file(
         self, file: UploadFile, metadata: Optional[FileUploadMetadata] = None
-        ) -> UploadResponse:
+        ) -> Tuple[UploadResponse, int]:
         """
         Save the uploaded file and create a ingestion job.
         """
@@ -122,12 +123,184 @@ class IngestionService:
             raise HTTPException(status_code=404, detail=str(e))
 
 
+    async def ingest_file_to_db_with_staging(
+        self, job_id: int, file_id: str
+    ) -> None:
+        """
+        Ingest data using staging table approach.
+        """
+        try:
+            async with self.session.begin():
+                job = await self.get_job_by_id(job_id)
+                if not job:
+                    logger.error(f"Job not found with id {job_id}")
+                    raise HTTPException(status_code=404, detail="Job not found")
+
+                file_path = os.path.join(settings.UPLOADS_DIR, file_id)
+                if not os.path.exists(file_path):
+                    raise HTTPException(status_code=404, detail="File not found")
+
+                logger.info(f"Starting staging ingestion for job {job.id}")
+                start_time = datetime.utcnow()
+
+                total_rows = await self._ingest_to_staging(job_id, file_path)
+                await self._move_staging_to_production(job_id)
+                await self._cleanup_staging_table(job_id)
+
+                await self._update_job_completion(job_id, total_rows, start_time)
+
+                logger.info(f"Staging ingestion completed for job {job.id}: {total_rows} rows")
+                # await self.session.commit()
+
+        except Exception as e:
+            logger.error(f"Staging ingestion failed: {e}")
+
+            # await self._cleanup_staging_table(job_id)
+            # await self.session.rollback()
+            await self._update_job_failure(job_id, str(e))
+
+            raise HTTPException(status_code=500, detail=str(e))
+
     
+    async def _ingest_to_staging(self, job_id: int, file_path: str) -> int:
+        """
+        Process all chunks into staging table.
+        """
+        try:
+            total_rows = 0
+
+            ext = os.path.splitext(file_path)[-1].lower()
+            if ext == ".json":
+                chunk_generator = normalizer_k6_json(file_path, chunk_size=50000)
+            elif ext == ".csv":
+                reader = pd.read_csv(file_path, chunksize=50000)
+                chunk_generator = (normalizer_k6_csv(chunk) for chunk in reader)
+            else:
+                logger.error(f"Unsupported file extension: {ext}")
+                raise ValueError(f"Unsupported file extension: {ext}")
+
+            for df_chunk in chunk_generator:
+                if df_chunk.empty:
+                    continue
+
+                staging_rows = [
+                    RequestLogStaging(
+                        job_id=job_id,
+                        timestamp=row.get("timestamp"),
+                        url=row.get("url"),
+                        method=row.get("method"),
+                        status_code=int(row.get("status") or 0),
+                        success=row.get("success"),
+                        response_time_ms=row.get("response_time_ms"),
+                        blocked_ms=row.get("blocked_ms"),
+                        connecting_ms=row.get("connecting_ms"),
+                        receiving_ms=row.get("receiving_ms"),
+                        sending_ms=row.get("sending_ms"),
+                        tls_handshake_ms=row.get("tls_handshake_ms"),
+                        waiting_ms=row.get("waiting_ms"),
+                    )
+                    for row in df_chunk.to_dict(orient="records")
+                ]
+
+                self.session.add_all(staging_rows)
+                await self.session.flush()
+                total_rows += len(staging_rows)
+
+            # await self.session.commit()  # Commit all staging data
+            return total_rows
+        except Exception as e:
+            logger.error(f"Error ingesting to staging: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+
+    async def _move_staging_to_production(self, job_id: int) -> None:
+        """
+        Move data from staging to production table.
+        """
+        try:
+            move_query = text("""
+                INSERT INTO request_logs (
+                    job_id, timestamp, url, method, status_code, success,
+                    response_time_ms, blocked_ms, connecting_ms, receiving_ms,
+                    sending_ms, tls_handshake_ms, waiting_ms
+                )
+                SELECT 
+                    job_id, timestamp, url, method, status_code, success,
+                    response_time_ms, blocked_ms, connecting_ms, receiving_ms,
+                    sending_ms, tls_handshake_ms, waiting_ms
+                FROM request_logs_staging 
+                WHERE job_id = :job_id
+            """)
+        
+            await self.session.execute(move_query, {"job_id": job_id})
+            # await self.session.commit()
+        except Exception as e:
+            logger.error(f"Error moving staging to production: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    async def _cleanup_staging_table(self, job_id: int) -> None:
+        """
+        Clean up staging table for this job.
+        """
+        try:
+            cleanup_query = text("""
+                DELETE FROM request_logs_staging 
+                WHERE job_id = :job_id
+            """)
+            
+            await self.session.execute(cleanup_query, {"job_id": job_id})
+            # await self.session.commit()
+        except Exception as e:
+            logger.error(f"Error cleaning up staging table: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+        
+    async def _update_job_completion(self, job_id: int, total_rows: int, start_time: datetime) -> None:
+        """
+        Update job status to completed.
+        """
+        try:
+            await self.session.exec(
+                update(IngestionJob)
+                .where(IngestionJob.id == job_id)
+                .values(
+                    status="completed",
+                    total_rows=total_rows,
+                    rows_ingested=total_rows,
+                    started_at=start_time,
+                    finished_at=datetime.utcnow(),
+                )
+            )
+            # await self.session.commit()
+        except Exception as e:
+            logger.error(f"Error updating job completion: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+        
+    async def _update_job_failure(self, job_id: int, error_message: str) -> None:
+        """
+        Update job status to failed.
+        """
+        try:
+            await self.session.exec(
+                update(IngestionJob)
+                .where(IngestionJob.id == job_id)
+                .values(
+                    status="failed", 
+                    error_details=error_message, 
+                    finished_at=datetime.now(timezone.utc)
+                ),
+            )
+            await self.session.commit()
+        except Exception as e:
+            logger.error(f"Error updating job failure: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+ 
     async def ingest_file_to_db(
         self, job_id: int, file_id: str
         ) -> None:
         """
-        Ingest the data from uploaded file to the database.
+        Ingest the data from uploaded file to the database. (OLD APPROACH)
         """
         try:
             job = await self.get_job_by_id(job_id)

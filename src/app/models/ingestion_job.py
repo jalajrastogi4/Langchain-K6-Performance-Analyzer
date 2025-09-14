@@ -4,6 +4,14 @@ from sqlalchemy.dialects import postgresql as pg
 from sqlalchemy import func, text
 from datetime import datetime, timezone
 from typing import Optional, List
+from enum import Enum
+
+
+class JobStatus(str, Enum):
+    pending = "pending"
+    in_progress = "in_progress"
+    completed = "completed"
+    failed = "failed"
 
 
 class IngestionJob(SQLModel, table=True):
@@ -16,7 +24,7 @@ class IngestionJob(SQLModel, table=True):
     file_type: str = Field(nullable=False)
     file_size_mb: Optional[float] = None
       
-    status: str = Field(index=True)
+    status: JobStatus = Field(index=True, default=JobStatus.pending)
     rows_ingested: Optional[int] = Field(nullable=True)
     total_rows: Optional[int] = Field(nullable=True)
     processing_errors_count: int = Field(default=0)
